@@ -2,6 +2,7 @@
 import streamlit as st
 from scripts.vectordb import VectorDatabase
 from scripts.rag import RetrievalAugmentedGenerator
+from pathlib import Path
 
 def initialize_session_state():
     """
@@ -12,6 +13,17 @@ def initialize_session_state():
         st.session_state.messages = []
     if "files" not in st.session_state:
         st.session_state.files = set()
+        
+    # Load existing files from data/raw directory
+    raw_dir = Path("data/raw")
+    if raw_dir.exists():
+        with VectorDatabase() as db:
+            for file_path in raw_dir.glob("*.txt"):
+                if file_path.name not in st.session_state.files:
+                    with open(file_path, "r", encoding="utf-8") as f:
+                        content = f.read()
+                        db.put(file_path.name, content)
+                        st.session_state.files.add(file_path.name)
 
 def display_chat():
     """
@@ -66,7 +78,7 @@ def main():
                     with col1:
                         st.text(file)
                     with col2:
-                        if st.button("Delete", key=f"del_{file}"):
+                        if st.button("🗑", key=f"del_{file}", help="Delete file"):
                             db.delete(file)
                             st.session_state.files.remove(file)
                             st.rerun()
