@@ -1,0 +1,4 @@
+fastembed==0.5.1
+numpy==2.2.3
+openai==1.64.0
+streamlit==1.42.2
