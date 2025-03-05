@@ -2,11 +2,32 @@ from openai import OpenAI
 
 # RAG system implementation
 class RetrievalAugmentedGenerator:
+    """
+    A class that implements Retrieval Augmented Generation using OpenAI's API and a vector database.
+    This class combines document retrieval with language model generation to provide context-aware responses.
+    """
     def __init__(self, db):
+        """
+        Initialize the RAG system.
+        
+        Args:
+            db: A vector database instance used for document retrieval
+        """
         self.client = OpenAI()
         self.db = db
 
     def generate(self, query):
+        """
+        Generate a response to a query using retrieved context from the vector database.
+        
+        Args:
+            query (str): The user's question or query
+            
+        Returns:
+            dict: A dictionary containing:
+                - response (str): The generated response from the language model
+                - context (str): The retrieved context used to generate the response
+        """
         # Retrieve relevant chunks from the database
         chunks = list(self.db.search(query))
         
