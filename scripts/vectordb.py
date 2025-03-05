@@ -73,6 +73,11 @@ class VectorDatabase:
             filename: Name of the file to store
             text: Text content to store and chunk
         """
+        # Check if file already exists in database
+        self.cursor.execute('SELECT COUNT(*) FROM VECTORS WHERE filename = ?', (filename,))
+        if self.cursor.fetchone()[0] > 0:
+            return  # Skip if file already exists
+
         # Store original text in raw directory
         raw_path = os.path.join(self.raw_dir, filename)
         with open(raw_path, 'w', encoding='utf-8') as f:
