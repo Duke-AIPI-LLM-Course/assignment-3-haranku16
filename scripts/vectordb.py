@@ -3,12 +3,12 @@ import numpy as np
 import sqlite3
 import os
 import uuid
+import pickle
 
 from scripts.embed import Embedder
-from scripts.cosine_similarity import cosine_similarity
+from scripts.similarity import similarity_score
 
 CHUNK_SIZE = 1000
-CHUNK_OVERLAP = 200
 
 class VectorDatabase:
     def __init__(self, db_path="vector_store.db"):
@@ -47,7 +47,7 @@ class VectorDatabase:
                 id TEXT PRIMARY KEY,  -- filename#chunk_id
                 filename TEXT NOT NULL,
                 chunk_id TEXT NOT NULL,
-                embedding TEXT
+                embedding BLOB
             )
         ''')
         self.connection.commit()
@@ -95,7 +95,7 @@ class VectorDatabase:
             self.cursor.execute('''
                 INSERT INTO VECTORS (id, filename, chunk_id, embedding)
                 VALUES (?, ?, ?, ?)
-            ''', (vector_id, filename, chunk_id, np.array2string(embedding, separator=',', precision=3, suppress_small=True)))
+            ''', (vector_id, filename, chunk_id, pickle.dumps(embedding)))
 
     def delete(self, filename):
         """
@@ -122,7 +122,7 @@ class VectorDatabase:
         self.cursor.execute('DELETE FROM VECTORS WHERE filename = ?', (filename,))
         self.connection.commit()
     
-    def search(self, query, k=10):
+    def search(self, query):
         """
         Search the vector database for the query and returns the top k results
         Args:
@@ -135,28 +135,76 @@ class VectorDatabase:
         # Get all vectors from the database and calculate cosine similarity with the query embedding
         self.cursor.execute('SELECT chunk_id, embedding FROM VECTORS')
         rows = [row for row in self.cursor.fetchall()]
-        embeddings = [np.fromstring(row[1], sep=',') for row in rows]
-        similarities = [cosine_similarity(query_embedding, vector) for vector in embeddings]
+        embeddings = [pickle.loads(row[1]) for row in rows]
+        similarities = [similarity_score(query_embedding, vector) for vector in embeddings]
 
         # Get the top k results
-        top_k_results = sorted(zip(similarities, rows), key=lambda x: x[0], reverse=True)[:k]
+        sorted_results = sorted(zip(similarities, rows), key=lambda x: x[0], reverse=True)
         
         # Get the chunks from the filesystem
-        chunks = []
-        for similarity, row in top_k_results:
+        for similarity, row in sorted_results:
             chunk_id = row[0]
             chunk_path = os.path.join(self.chunks_dir, f"{chunk_id}.txt")
             with open(chunk_path, 'r', encoding='utf-8') as f:
-                chunks.append(f.read())
-
-        return chunks
+                yield similarity, f.read()
 
     def __chunk(self, text):
         """
-        Chunk the text into smaller pieces with overlap
+        Chunk the text into pieces based on paragraphs with intelligent combining and splitting.
+        - Paragraphs < CHUNK_SIZE are kept as single chunks
+        - Small paragraphs (<100 words) are combined with subsequent paragraphs
+        - Paragraphs > CHUNK_SIZE are split into roughly equal chunks
         """
-        words = text.split()  # Split by all whitespace characters
+        # Split into paragraphs (handling different line ending styles)
+        paragraphs = [p.strip() for p in text.split('\n\n') if p.strip()]
+        
         chunks = []
-        for i in range(0, len(words), CHUNK_SIZE - CHUNK_OVERLAP):
-            chunks.append(" ".join(words[i:i+CHUNK_SIZE]))
+        current_para = []
+        current_word_count = 0
+        
+        def split_large_paragraph(paragraph):
+            words = paragraph.split()
+            total_words = len(words)
+            # Calculate number of chunks needed
+            num_chunks = (total_words + CHUNK_SIZE - 1) // CHUNK_SIZE
+            # Calculate target size for roughly equal chunks
+            target_size = total_words // num_chunks
+            
+            para_chunks = []
+            for i in range(0, total_words, target_size):
+                end_idx = min(i + target_size, total_words)
+                para_chunks.append(' '.join(words[i:end_idx]))
+            return para_chunks
+        
+        for para in paragraphs:
+            para_words = para.split()
+            word_count = len(para_words)
+            
+            # If we have accumulated paragraphs and the new one would exceed CHUNK_SIZE
+            if current_para and (current_word_count + word_count > CHUNK_SIZE):
+                chunks.append(' '.join(current_para))
+                current_para = []
+                current_word_count = 0
+            
+            # Handle the current paragraph
+            if word_count < 100:  # Small paragraph
+                current_para.append(para)
+                current_word_count += word_count
+            elif word_count <= CHUNK_SIZE:  # Medium paragraph
+                if current_para:  # Flush any accumulated paragraphs
+                    chunks.append(' '.join(current_para))
+                    current_para = []
+                    current_word_count = 0
+                chunks.append(para)
+            else:  # Large paragraph
+                if current_para:  # Flush any accumulated paragraphs
+                    chunks.append(' '.join(current_para))
+                    current_para = []
+                    current_word_count = 0
+                chunks.extend(split_large_paragraph(para))
+        
+        # Add any remaining accumulated paragraphs
+        if current_para:
+            chunks.append(' '.join(current_para))
+        
         return chunks

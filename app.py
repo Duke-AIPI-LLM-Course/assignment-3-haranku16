@@ -17,7 +17,9 @@ def main():
         # Search for documents
         query = st.text_input("Enter a search query")
         if st.button("Search"):
-            st.write(db.search(query))
+            for similarity, chunk in db.search(query):
+                st.write(f"Similarity: {similarity}")
+                st.write(chunk)
 
 if __name__ == "__main__":
     main()
