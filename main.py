@@ -1,6 +1,7 @@
 import argparse
 from scripts.vectordb import VectorDatabase
 import os
+from scripts.rag import RetrievalAugmentedGenerator
 
 def main():
     # Set up argument parser
@@ -30,15 +31,19 @@ def main():
         filename = os.path.basename(args.filepath)
         db.put(filename, content)
         
-        # Search using the question
-        search = db.search(args.question)
+        # Initialize the RAG system and generate answer
+        rag = RetrievalAugmentedGenerator(db)
+        result = rag.generate(args.question)
         
         # Write results to analysis.txt
         with open('analysis.txt', 'w', encoding='utf-8') as outfile:
-            for similarity, chunk in search:
-                outfile.write(f"Similarity: {similarity}\n")
-                outfile.write(chunk)
-                outfile.write("\n\n")
+            outfile.write("Question:\n")
+            outfile.write(args.question)
+            outfile.write("\n\nAnswer:\n")
+            outfile.write(result['response'])
+            outfile.write("\n\nEvidence:\n")
+            outfile.write(result['context'])
+            outfile.write("\n")
 
 if __name__ == "__main__":
     main()
