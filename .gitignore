@@ -42,5 +42,6 @@ coverage.xml
 .DS_Store
 Thumbs.db
 
-# Vector database
+# Vector database and data directory
 vector_store.db
+data/

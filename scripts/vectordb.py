@@ -13,9 +13,10 @@ CHUNK_SIZE = 1000
 class VectorDatabase:
     def __init__(self, db_path="vector_store.db"):
         """
-        Initialize the vector database
+        Initialize the vector database with the specified database path.
+        
         Args:
-            db_path: Path to SQLite database file
+            db_path (str, optional): Path to SQLite database file. Defaults to "vector_store.db".
         """
         # Create data directory structure
         self.data_dir = "data"
@@ -36,7 +37,10 @@ class VectorDatabase:
     
     def __enter__(self):
         """
-        Enter the context of the vector database
+        Enter the context of the vector database, establishing database connection.
+        
+        Returns:
+            VectorDatabase: The database instance with an active connection.
         """
         self.connection = sqlite3.connect(self.db_path)
         self.cursor = self.connection.cursor()
@@ -54,9 +58,14 @@ class VectorDatabase:
 
         return self
     
-    def __exit__(self, exc_type, exc_value, traceback): 
+    def __exit__(self, exc_type, exc_value, traceback):
         """
-        Exit the context of the vector database
+        Exit the context of the vector database, closing all connections.
+        
+        Args:
+            exc_type: The type of the exception that was raised
+            exc_value: The instance of the exception that was raised
+            traceback: The traceback of the exception that was raised
         """
         if self.cursor:
             self.cursor.close()
@@ -68,10 +77,11 @@ class VectorDatabase:
 
     def put(self, filename, text):
         """
-        Put the text into the vector database
+        Store text content in the vector database with associated embeddings.
+        
         Args:
-            filename: Name of the file to store
-            text: Text content to store and chunk
+            filename (str): Name of the file to store
+            text (str): Text content to store and chunk
         """
         # Check if file already exists in database
         self.cursor.execute('SELECT COUNT(*) FROM VECTORS WHERE filename = ?', (filename,))
@@ -104,9 +114,10 @@ class VectorDatabase:
 
     def delete(self, filename):
         """
-        Delete the text and its chunks from the vector database
+        Remove a file and its associated chunks from the vector database.
+        
         Args:
-            filename: Name of the file to delete
+            filename (str): Name of the file to delete
         """
         # Get all chunk_ids for this filename from the VECTORS table
         self.cursor.execute('SELECT chunk_id FROM VECTORS WHERE filename = ?', (filename,))
@@ -129,10 +140,15 @@ class VectorDatabase:
     
     def search(self, query):
         """
-        Search the vector database for the query and returns the top k results
+        Search the vector database for content similar to the query.
+        
         Args:
-            query: Query to search for
-            k: Number of results to return
+            query (str): Query text to search for
+            
+        Yields:
+            tuple: A tuple containing:
+                - float: Similarity score between the query and the chunk
+                - str: The text content of the matching chunk
         """
         # Embed the query
         query_embedding = [ embedding for embedding in self.embedder.embed([query]) ][0]
@@ -155,10 +171,18 @@ class VectorDatabase:
 
     def __chunk(self, text):
         """
-        Chunk the text into pieces based on paragraphs with intelligent combining and splitting.
-        - Paragraphs < CHUNK_SIZE are kept as single chunks
-        - Small paragraphs (<100 words) are combined with subsequent paragraphs
-        - Paragraphs > CHUNK_SIZE are split into roughly equal chunks
+        Split text into chunks based on paragraphs with intelligent combining and splitting.
+        
+        Args:
+            text (str): The input text to be chunked
+            
+        Returns:
+            list: A list of text chunks, each approximately CHUNK_SIZE words or less
+            
+        Notes:
+            - Paragraphs < CHUNK_SIZE are kept as single chunks
+            - Small paragraphs (<100 words) are combined with subsequent paragraphs
+            - Paragraphs > CHUNK_SIZE are split into roughly equal chunks
         """
         # Split into paragraphs (handling different line ending styles)
         paragraphs = [p.strip() for p in text.split('\n\n') if p.strip()]
